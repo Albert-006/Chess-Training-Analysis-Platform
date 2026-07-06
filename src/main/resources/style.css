@@ -1,0 +1,73 @@
+.root {
+    -fx-font-family: "Segoe UI", Arial, sans-serif;
+    -fx-background-color: #f4f6f8;
+}
+
+.sidebar {
+    -fx-background-color: #1f2933;
+    -fx-min-width: 220;
+}
+
+.sidebar .label {
+    -fx-text-fill: #f8fafc;
+}
+
+.app-title {
+    -fx-font-size: 24;
+    -fx-font-weight: bold;
+}
+
+.button {
+    -fx-background-radius: 6;
+    -fx-padding: 8 12 8 12;
+    -fx-cursor: hand;
+}
+
+.sidebar .button {
+    -fx-background-color: #334155;
+    -fx-text-fill: #f8fafc;
+}
+
+.sidebar .button:hover {
+    -fx-background-color: #475569;
+}
+
+.panel {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d6dee8;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-min-width: 300;
+}
+
+.board {
+    -fx-border-color: #111827;
+    -fx-border-width: 2;
+}
+
+.light-square {
+    -fx-background-color: #e8edf3;
+}
+
+.dark-square {
+    -fx-background-color: #6b7d90;
+}
+
+.selected-square {
+    -fx-background-color: #f4c542;
+}
+
+.legal-square {
+    -fx-border-color: #22c55e;
+    -fx-border-width: 4;
+}
+
+.white-piece {
+    -fx-text-fill: #fffaf0;
+    -fx-effect: dropshadow(one-pass-box, #111827, 1, 1, 0, 1);
+}
+
+.black-piece {
+    -fx-text-fill: #101820;
+    -fx-effect: dropshadow(one-pass-box, #f8fafc, 1, 1, 0, 1);
+}

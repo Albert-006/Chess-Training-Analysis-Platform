@@ -1,0 +1,16 @@
+target/
+data/users/*
+data/games/*
+data/puzzles/*
+data/openings/*
+data/settings/*
+!data/users/.gitkeep
+!data/games/.gitkeep
+!data/puzzles/.gitkeep
+!data/openings/.gitkeep
+!data/settings/.gitkeep
+*.log
+*.tmp
+.idea/
+.vscode/
+*.iml
