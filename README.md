@@ -81,7 +81,3 @@ JUnit tests cover:
 - Elo calculation
 - File saving/loading
 - Puzzle validation
-
-## Notes for Viva / Presentation
-
-The `engine.Board` class is the core of the project. It builds a game tree through recursive move generation and board copies. `ai.MinimaxAI` demonstrates plain Minimax recursion, while `ai.AlphaBetaAI` adds pruning to reduce branches. `analysis.GameAnalyzer` replays a game and compares each played move against the AI's preferred move, converting centipawn loss into the requested move categories.
