@@ -15,8 +15,11 @@ import opening.Opening;
 import opening.OpeningBook;
 import puzzle.Puzzle;
 import puzzle.PuzzleService;
+import puzzle.PuzzleSession;
 import storage.GameStorage;
 import storage.SavedGame;
+import storage.SettingsStorage;
+import storage.UserSettings;
 import storage.UserStorage;
 import util.EloCalculator;
 
@@ -37,16 +40,20 @@ public class GameController {
     private final PuzzleService puzzleService = new PuzzleService();
     private final UserStorage userStorage;
     private final GameStorage gameStorage;
+    private final SettingsStorage settingsStorage;
     private final EvaluationFunction evaluationFunction = new EvaluationFunction();
 
     private Board board = new Board();
     private User currentUser;
+    private UserSettings currentSettings = new UserSettings();
     private AIDifficulty difficulty = AIDifficulty.EASY;
     private PieceColor humanColor = PieceColor.WHITE;
 
     public GameController(Path dataRoot) {
         this.userStorage = new UserStorage(dataRoot);
         this.gameStorage = new GameStorage(dataRoot);
+        this.settingsStorage = new SettingsStorage(dataRoot);
+        this.currentSettings = this.settingsStorage.loadOrDefault("default");
     }
 
     public Board getBoard() {
@@ -57,6 +64,20 @@ public class GameController {
         return currentUser;
     }
 
+    public boolean isAuthenticated() {
+        return currentUser != null;
+    }
+
+    public UserSettings getCurrentSettings() {
+        return currentSettings;
+    }
+
+    public void saveCurrentSettings(UserSettings settings) {
+        this.currentSettings = settings != null ? settings : new UserSettings();
+        String username = currentUser != null ? currentUser.getUsername() : "default";
+        settingsStorage.save(username, this.currentSettings);
+    }
+
     public AIDifficulty getDifficulty() {
         return difficulty;
     }
@@ -65,17 +86,63 @@ public class GameController {
         this.difficulty = difficulty;
     }
 
-    public User loginOrRegister(String username, String password) {
-        Optional<User> authenticated = userStorage.authenticate(username, password);
+    public User login(String username, String password) {
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Username cannot be empty");
+        }
+        if (password == null || password.trim().isEmpty()) {
+            throw new IllegalArgumentException("Password cannot be empty");
+        }
+        Optional<User> authenticated = userStorage.authenticate(username.trim(), password);
         if (authenticated.isPresent()) {
             currentUser = authenticated.get();
+            currentSettings = settingsStorage.loadOrDefault(currentUser.getUsername());
             return currentUser;
         }
-        if (userStorage.find(username).isPresent()) {
+        if (userStorage.find(username.trim()).isPresent()) {
             throw new IllegalArgumentException("Invalid password for " + username);
         }
-        currentUser = userStorage.register(username, password);
+        throw new IllegalArgumentException("User " + username + " does not exist. Please register.");
+    }
+
+    public User register(String username, String password) {
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Username cannot be empty");
+        }
+        if (password == null || password.length() < 3) {
+            throw new IllegalArgumentException("Password must be at least 3 characters");
+        }
+        String cleanUser = username.trim();
+        if (userStorage.find(cleanUser).isPresent()) {
+            throw new IllegalArgumentException("User " + cleanUser + " already exists");
+        }
+        currentUser = userStorage.register(cleanUser, password);
+        currentSettings = settingsStorage.loadOrDefault(currentUser.getUsername());
         return currentUser;
+    }
+
+    public User loginOrRegister(String username, String password) {
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Username cannot be empty");
+        }
+        Optional<User> authenticated = userStorage.authenticate(username.trim(), password);
+        if (authenticated.isPresent()) {
+            currentUser = authenticated.get();
+            currentSettings = settingsStorage.loadOrDefault(currentUser.getUsername());
+            return currentUser;
+        }
+        if (userStorage.find(username.trim()).isPresent()) {
+            throw new IllegalArgumentException("Invalid password for " + username);
+        }
+        currentUser = userStorage.register(username.trim(), password);
+        currentSettings = settingsStorage.loadOrDefault(currentUser.getUsername());
+        return currentUser;
+    }
+
+    public void logout() {
+        currentUser = null;
+        currentSettings = settingsStorage.loadOrDefault("default");
+        newGame();
     }
 
     public void newGame() {
@@ -103,6 +170,13 @@ public class GameController {
     public Optional<Move> hint() {
         AlphaBetaAI ai = new AlphaBetaAI(Math.max(1, difficulty.getDepth()));
         return ai.chooseMove(board, board.getSideToMove());
+    }
+
+    public Optional<Move> getPuzzleHint(PuzzleSession session) {
+        if (session == null) {
+            return Optional.empty();
+        }
+        return session.getNextExpectedMove();
     }
 
     public void undoLastPly() {
@@ -155,7 +229,14 @@ public class GameController {
     }
 
     public List<SavedGame> savedGames() {
-        return gameStorage.loadAll();
+        List<SavedGame> all = gameStorage.loadAll();
+        if (currentUser == null) {
+            return all;
+        }
+        // Filter to current user
+        return all.stream()
+                .filter(g -> currentUser.getUsername().equalsIgnoreCase(g.getUsername()))
+                .collect(Collectors.toList());
     }
 
     public String resultText() {
@@ -190,6 +271,22 @@ public class GameController {
         return diff > 0 ? "White +" + diff : "Black +" + Math.abs(diff);
     }
 
+    public void recordPuzzleSolved(Puzzle puzzle) {
+        if (currentUser != null && puzzle != null) {
+            int newRating = currentUser.getPuzzleRating() + Math.max(5, (puzzle.getRating() - currentUser.getPuzzleRating()) / 10 + 10);
+            currentUser.setPuzzleRating(newRating);
+            userStorage.save(currentUser);
+        }
+    }
+
+    public void recordPuzzleFailed(Puzzle puzzle) {
+        if (currentUser != null && puzzle != null) {
+            int newRating = Math.max(400, currentUser.getPuzzleRating() - 8);
+            currentUser.setPuzzleRating(newRating);
+            userStorage.save(currentUser);
+        }
+    }
+
     private void updateUserAfterGame() {
         if (currentUser == null || board.getGameStatus() == GameStatus.ACTIVE) {
             return;
@@ -203,8 +300,8 @@ public class GameController {
             score = 0.5;
         }
         currentUser.recordResult(score);
-        currentUser.setEloRating(EloCalculator.updateRating(currentUser.getEloRating(), AI_RATING, score, 32));
-        currentUser.setFavoriteOpening(openingName());
+        int newElo = EloCalculator.updateRating(currentUser.getEloRating(), AI_RATING, score, 32);
+        currentUser.setEloRating(newElo);
         userStorage.save(currentUser);
     }
 }
